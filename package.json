@@ -1,0 +1,33 @@
+{
+  "type": "commonjs",
+  "name": "spellforge-showdown-server",
+  "version": "1.0.0",
+  "description": "Authoritative Node.js server for Spellforge prototype.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon src/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/7bubba10/Spellforge-Showdown-Server.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/7bubba10/Spellforge-Showdown-Server/issues"
+  },
+  "homepage": "https://github.com/7bubba10/Spellforge-Showdown-Server#readme",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
