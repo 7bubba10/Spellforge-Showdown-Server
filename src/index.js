@@ -1,10 +1,9 @@
-// src/index.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Server: IOServer } = require('socket.io');
 
-// schemas & room helpers
+// Schemas & room helpers
 const { PingSchema, LobbyCreateSchema, LobbyJoinSchema } = require('./schemas');
 const { createRoom, getRoom, removeRoomIfEmpty } = require('./rooms');
 
@@ -12,17 +11,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// simple sanity routes
-app.get('/', (_req, res) => { res.send('Hello World'); });
-app.get('/health', (_req, res) => { res.json({ ok: true, ts: Date.now() }); });
+// Sanity routes
+app.get('/', (_req, res) => res.send('Hello World'));
+app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
-// http server
+// HTTP server
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3003;
 const httpServer = app.listen(PORT, () => {
   console.log(`[http] listening on http://localhost:${PORT}`);
 });
 
-// socket.io on same port + gameplay namespace
+// Socket.io (same port) + gameplay namespace
 const io = new IOServer(httpServer, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
 });
@@ -30,7 +29,7 @@ const game = io.of('/game');
 
 /* ----------------------- helpers ----------------------- */
 
-// broadcast current roster to everyone in a room
+// Broadcast current roster to everyone in a room
 function broadcastRoster(code) {
   const room = getRoom(code);
   if (!room) return;
@@ -39,14 +38,31 @@ function broadcastRoster(code) {
   });
 }
 
-// 10 Hz room tick that emits { t } to that room
+// Keep room.state.teams {t0,t1} accurate
+function recomputeTeamCounts(room) {
+  let t0 = 0, t1 = 0;
+  for (const p of room.players.values()) {
+    if (p.team === 0) t0++; else t1++;
+  }
+  room.state.teams = { t0, t1 };
+}
+
+// 10 Hz room tick that emits { t } and full state
 const roomTimers = new Map(); // code -> setInterval handle
 function startTick(code) {
   if (roomTimers.has(code)) return;
-  let t = 0;
   const handle = setInterval(() => {
-    game.to(`match:${code}`).emit('tick', { t });
-    t++;
+    const room = getRoom(code);
+    if (!room) return;
+
+    // advance server-side state (demo)
+    room.state.tick += 1;
+    const p = room.state.point.progress;
+    room.state.point.progress = Math.min(100, p + 1);
+
+    // broadcast
+    game.to(`match:${code}`).emit('tick', { t: room.state.tick });
+    game.to(`match:${code}`).emit('state:update', room.state);
   }, 100); // 10 Hz
   roomTimers.set(code, handle);
 }
@@ -66,7 +82,7 @@ function stopTickIfEmpty(code) {
 game.on('connection', (socket) => {
   console.log(`[ws] connected: ${socket.id}`);
 
-  // ---- ping/echo (with validation) ----
+  // Ping/echo with validation
   socket.on('ping:client', (payload) => {
     const parsed = PingSchema.safeParse(payload);
     if (!parsed.success) {
@@ -76,7 +92,7 @@ game.on('connection', (socket) => {
     socket.emit('ping:server', { got: parsed.data, ts: Date.now() });
   });
 
-  // ---- create lobby ----
+  // Create lobby (host spawns team 0)
   socket.on('lobby:create', (payload) => {
     const parsed = LobbyCreateSchema.safeParse(payload);
     if (!parsed.success) {
@@ -91,12 +107,13 @@ game.on('connection', (socket) => {
     socket.join(`match:${room.code}`);
     socket.data.roomCode = room.code;
 
+    recomputeTeamCounts(room);
     socket.emit('lobby:created', { code: room.code, you: player });
     broadcastRoster(room.code);
     startTick(room.code);
   });
 
-  // ---- join lobby ----
+  // Join lobby (enforce 2v2 cap, balance teams)
   socket.on('lobby:join', (payload) => {
     const parsed = LobbyJoinSchema.safeParse(payload);
     if (!parsed.success) {
@@ -110,22 +127,27 @@ game.on('connection', (socket) => {
       return;
     }
 
-    // simple team balance
-    const counts = { t0: 0, t1: 0 };
-    for (const p of room.players.values()) (p.team === 0 ? counts.t0++ : counts.t1++);
-    const team = counts.t0 <= counts.t1 ? 0 : 1;
+    // Capacity check (2v2 => max 4)
+    if (room.players.size >= room.maxPlayers) {
+      socket.emit('error:full', { code: room.code, max: room.maxPlayers });
+      return;
+    }
+
+    // Balanced team pick using current counts
+    const { t0, t1 } = room.state.teams || { t0: 0, t1: 0 };
+    const team = t0 <= t1 ? 0 : 1;
 
     const player = { id: socket.id, name: parsed.data.name, team };
     room.players.set(socket.id, player);
-
     socket.join(`match:${room.code}`);
     socket.data.roomCode = room.code;
 
+    recomputeTeamCounts(room);
     socket.emit('lobby:joined', { code: room.code, you: player });
     broadcastRoster(room.code);
   });
 
-  // ---- cleanup on disconnect ----
+  // Cleanup on disconnect
   socket.on('disconnect', (reason) => {
     const code = socket.data.roomCode;
     if (!code) {
@@ -136,6 +158,7 @@ game.on('connection', (socket) => {
     const room = getRoom(code);
     if (room) {
       room.players.delete(socket.id);
+      recomputeTeamCounts(room);
       broadcastRoster(code);
       removeRoomIfEmpty(code);
       stopTickIfEmpty(code);

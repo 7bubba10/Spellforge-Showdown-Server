@@ -6,9 +6,18 @@ function makeCode() {
 
 function createRoom() {
     const code = makeCode();
-    const room = {code, players: new Map()};
-    rooms.set(code, room);
-    return room;
+    const room = {
+        code,
+        players: new Map(),
+        maxPlayers: 4,
+        state: {
+          tick: 0, // server tick counter
+          point: { progress: 0 },
+          teams: { t0: 0, t1: 0 }, 
+        },
+      };
+      rooms.set(code, room);
+      return room;
 }
 
 function getRoom(code) {

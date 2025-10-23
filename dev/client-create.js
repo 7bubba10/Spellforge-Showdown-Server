@@ -17,8 +17,15 @@ socket.on('lobby:players', (roster) => {
   console.log('[creator] roster', roster);
 });
 
+socket.on('state:update', (state) => {
+  console.log('[creator] state', state);
+});
+
+
 socket.on('error:bad_payload', (e) => console.log('[creator] bad payload', e));
 socket.on('error:not_found', (e) => console.log('[creator] not found', e));
 socket.on('disconnect', (reason) => console.log('[creator] disconnected', reason));
 socket.on('tick', (msg) => console.log('[creator] tick', msg));
+socket.on('lobby:players', (r) => console.log('[creator] roster', r));
+socket.on('state:update', (s) => console.log('[creator] state', s.state?.teams || s.teams || s));
 
