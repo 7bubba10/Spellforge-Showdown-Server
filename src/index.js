@@ -27,7 +27,7 @@ const httpServer = app.listen(PORT, () => {
   console.log(`[http] listening on http://localhost:${PORT}`);
 });
 
-// Socket.io (same port) + gameplay namespace
+// Socket.io + gameplay namespace
 const io = new IOServer(httpServer, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
 });
@@ -41,7 +41,7 @@ function broadcastRoster(code) {
   if (!room) return;
   game.to(`match:${code}`).emit('lobby:players', {
     players: Array.from(room.players.values()),
-    state: room.state, // nice to have for clients that display counts/tick
+    state: room.state, 
   });
 }
 
@@ -54,6 +54,27 @@ function recomputeTeamCounts(room) {
   room.state.teams = { t0, t1 };
 }
 
+// --- readiness helpers ---
+function allReady(room) {
+  // for now: start when at least 2 players, and everyone is ready
+  if (room.players.size < 2) return false;
+  for (const p of room.players.values()) {
+    if (!p.ready) return false;
+  }
+  return true;
+}
+
+function maybeStartMatch(room) {
+  // only from lobby → countdown
+  if (room.state.phase !== 'lobby') return;
+  if (!allReady(room)) return;
+
+  room.state.phase = 'countdown';
+  // 3 seconds at 10 Hz tick = 30 ticks
+  room.state.countdown = 30;
+  game.to(`match:${room.code}`).emit('state:update', room.state);
+}
+
 // 10 Hz room tick that emits { t } and full state
 const roomTimers = new Map(); // code -> setInterval handle
 function startTick(code) {
@@ -64,6 +85,22 @@ function startTick(code) {
 
     // advance server-side state (demo)
     room.state.tick += 1;
+
+    // -------- countdown / phase logic --------
+    if (room.state.phase === 'countdown') {
+      // if readiness breaks during countdown, revert to lobby
+      if (!allReady(room)) {
+        room.state.phase = 'lobby';
+        room.state.countdown = 0;
+      } else {
+        room.state.countdown = Math.max(0, room.state.countdown - 1);
+        if (room.state.countdown === 0) {
+          room.state.phase = 'match';
+        }
+      }
+    }
+
+    // demo: slowly fill the capture point (
     const p = room.state.point.progress;
     room.state.point.progress = Math.min(100, p + 1);
 
@@ -73,6 +110,7 @@ function startTick(code) {
   }, 100); // 10 Hz
   roomTimers.set(code, handle);
 }
+
 function stopTickIfEmpty(code) {
   const room = getRoom(code);
   if (!room || room.players.size === 0) {
@@ -152,6 +190,7 @@ game.on('connection', (socket) => {
     recomputeTeamCounts(room);
     socket.emit('lobby:joined', { code: room.code, you: player });
     broadcastRoster(room.code);
+    maybeStartMatch(room);
   });
 
   // ---- Set ready flag (host or guest) ----
@@ -171,7 +210,7 @@ game.on('connection', (socket) => {
     p.ready = !!parsed.data.ready;
 
     broadcastRoster(room.code);
-    // maybeStartMatch(room); // (we'll add in a later step)
+    maybeStartMatch(room); 
   });
 
   // ---- Cleanup on disconnect ----
@@ -187,6 +226,12 @@ game.on('connection', (socket) => {
       room.players.delete(socket.id);
       recomputeTeamCounts(room);
       broadcastRoster(code);
+      if (room.state.phase === 'countdown' && !allReady(room)) {
+        room.state.phase = 'lobby';
+        room.state.countdown = 0;
+        game.to(`match:${code}`).emit('state:update', room.state);
+      }
+      
       removeRoomIfEmpty(code);
       stopTickIfEmpty(code);
     }
