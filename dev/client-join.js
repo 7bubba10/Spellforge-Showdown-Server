@@ -19,8 +19,26 @@ socket.on('state:update', (state) => {
 
 socket.on('lobby:joined', (msg) => {
   console.log('[joiner] lobby:joined', msg);
-  socket.emit('lobby:setReady', { ready: true });
+  //socket.emit('lobby:setReady', { ready: true });
 });
+
+// --- dev keybinds: press 'r' to toggle ready, 'q' to quit ---
+let _ready = false;
+function sendReady() {
+  socket.emit('lobby:setReady', { ready: _ready });
+  console.log(`[client] ready = ${_ready}`);
+}
+
+if (process.stdin.isTTY) {
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.on('data', (buf) => {
+    const k = buf.toString().trim().toLowerCase();
+    if (k === 'r') { _ready = !_ready; sendReady(); }
+    if (k === 'q') { console.log('bye'); process.exit(0); }
+  });
+}
+
 
 socket.on('lobby:players', (roster) => console.log('[joiner] roster', roster));
 socket.on('error:bad_payload', (e) => console.log('[joiner] bad payload', e));
@@ -29,5 +47,7 @@ socket.on('disconnect', (r) => console.log('[joiner] disconnected', r));
 socket.on('tick', (msg) => console.log('[joiner] tick', msg));
 socket.on('error:full', (e) => console.log('[joiner] room full', e));
 socket.on('state:update', (s) => console.log('[joiner] state', s.state?.teams || s.teams || s));
+socket.on('error:started', (e) => console.log('[joiner] match already started', e));
+
 
 

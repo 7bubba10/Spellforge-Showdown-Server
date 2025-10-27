@@ -9,7 +9,7 @@ socket.on('connect', () => {
 
 socket.on('lobby:created', (msg) => {
   console.log('[creator] lobby:created', msg);
-  socket.emit('lobby:setReady', { ready: true });
+  //socket.emit('lobby:setReady', { ready: true });
   console.log(`[creator] Share this code with your friend: ${msg.code}`);
   // Stay connected so the room stays alive
 });
@@ -21,6 +21,24 @@ socket.on('lobby:players', (roster) => {
 socket.on('state:update', (state) => {
   console.log('[creator] state', state);
 });
+
+// --- dev keybinds: press 'r' to toggle ready, 'q' to quit ---
+let _ready = false;
+function sendReady() {
+  socket.emit('lobby:setReady', { ready: _ready });
+  console.log(`[client] ready = ${_ready}`);
+}
+
+if (process.stdin.isTTY) {
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.on('data', (buf) => {
+    const k = buf.toString().trim().toLowerCase();
+    if (k === 'r') { _ready = !_ready; sendReady(); }
+    if (k === 'q') { console.log('bye'); process.exit(0); }
+  });
+}
+
 
 
 socket.on('error:bad_payload', (e) => console.log('[creator] bad payload', e));
