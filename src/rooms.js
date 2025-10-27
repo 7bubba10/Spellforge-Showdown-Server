@@ -14,6 +14,8 @@ function createRoom() {
           tick: 0, // server tick counter
           point: { progress: 0 },
           teams: { t0: 0, t1: 0 }, 
+          phase: 'lobby',
+          countdown: 0,
         },
       };
       rooms.set(code, room);

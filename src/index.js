@@ -1,10 +1,16 @@
+// src/index.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Server: IOServer } = require('socket.io');
 
 // Schemas & room helpers
-const { PingSchema, LobbyCreateSchema, LobbyJoinSchema } = require('./schemas');
+const {
+  PingSchema,
+  LobbyCreateSchema,
+  LobbyJoinSchema,
+  SetReadySchema, 
+} = require('./schemas');
 const { createRoom, getRoom, removeRoomIfEmpty } = require('./rooms');
 
 const app = express();
@@ -29,12 +35,13 @@ const game = io.of('/game');
 
 /* ----------------------- helpers ----------------------- */
 
-// Broadcast current roster to everyone in a room
+// Broadcast current roster (and state, if you want) to everyone in a room
 function broadcastRoster(code) {
   const room = getRoom(code);
   if (!room) return;
   game.to(`match:${code}`).emit('lobby:players', {
     players: Array.from(room.players.values()),
+    state: room.state, // nice to have for clients that display counts/tick
   });
 }
 
@@ -82,7 +89,7 @@ function stopTickIfEmpty(code) {
 game.on('connection', (socket) => {
   console.log(`[ws] connected: ${socket.id}`);
 
-  // Ping/echo with validation
+  // ---- Ping/echo with validation (no state change here) ----
   socket.on('ping:client', (payload) => {
     const parsed = PingSchema.safeParse(payload);
     if (!parsed.success) {
@@ -92,7 +99,7 @@ game.on('connection', (socket) => {
     socket.emit('ping:server', { got: parsed.data, ts: Date.now() });
   });
 
-  // Create lobby (host spawns team 0)
+  // ---- Create lobby (host spawns team 0) ----
   socket.on('lobby:create', (payload) => {
     const parsed = LobbyCreateSchema.safeParse(payload);
     if (!parsed.success) {
@@ -101,7 +108,7 @@ game.on('connection', (socket) => {
     }
 
     const room = createRoom();
-    const player = { id: socket.id, name: parsed.data.hostName, team: 0 };
+    const player = { id: socket.id, name: parsed.data.hostName, team: 0, ready: false };
 
     room.players.set(socket.id, player);
     socket.join(`match:${room.code}`);
@@ -113,7 +120,7 @@ game.on('connection', (socket) => {
     startTick(room.code);
   });
 
-  // Join lobby (enforce 2v2 cap, balance teams)
+  // ---- Join lobby (enforce 2v2 cap, balance teams) ----
   socket.on('lobby:join', (payload) => {
     const parsed = LobbyJoinSchema.safeParse(payload);
     if (!parsed.success) {
@@ -137,7 +144,7 @@ game.on('connection', (socket) => {
     const { t0, t1 } = room.state.teams || { t0: 0, t1: 0 };
     const team = t0 <= t1 ? 0 : 1;
 
-    const player = { id: socket.id, name: parsed.data.name, team };
+    const player = { id: socket.id, name: parsed.data.name, team, ready: false };
     room.players.set(socket.id, player);
     socket.join(`match:${room.code}`);
     socket.data.roomCode = room.code;
@@ -147,7 +154,27 @@ game.on('connection', (socket) => {
     broadcastRoster(room.code);
   });
 
-  // Cleanup on disconnect
+  // ---- Set ready flag (host or guest) ----
+  socket.on('lobby:setReady', (payload) => {
+    const parsed = SetReadySchema.safeParse(payload);
+    if (!parsed.success) {
+      socket.emit('error:bad_payload', { event: 'lobby:setReady', issues: parsed.error.issues });
+      return;
+    }
+
+    const room = getRoom(socket.data.roomCode);
+    if (!room) return;
+
+    const p = room.players.get(socket.id);
+    if (!p) return;
+
+    p.ready = !!parsed.data.ready;
+
+    broadcastRoster(room.code);
+    // maybeStartMatch(room); // (we'll add in a later step)
+  });
+
+  // ---- Cleanup on disconnect ----
   socket.on('disconnect', (reason) => {
     const code = socket.data.roomCode;
     if (!code) {

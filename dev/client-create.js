@@ -9,6 +9,7 @@ socket.on('connect', () => {
 
 socket.on('lobby:created', (msg) => {
   console.log('[creator] lobby:created', msg);
+  socket.emit('lobby:setReady', { ready: true });
   console.log(`[creator] Share this code with your friend: ${msg.code}`);
   // Stay connected so the room stays alive
 });
