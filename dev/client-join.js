@@ -1,7 +1,7 @@
 const { io } = require('socket.io-client');
 const socket = io('http://localhost:3003/game', { transports: ['websocket'] });
 
-// pass the code as: node dev/client-join.js ABCD
+
 const CODE = process.argv[2];
 if (!CODE) {
   console.log('Usage: node dev/client-join.js <ROOM_CODE>');
