@@ -1,4 +1,4 @@
-// src/index.js
+const lobbyRoutes = require("../routes/lobby");
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -21,6 +21,7 @@ const { createRoom, getRoom, removeRoomIfEmpty } = require('./rooms');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use("/api/lobbies", lobbyRoutes);
 
 // Sanity routes
 app.get('/', (_req, res) => res.send('Hello World'));
