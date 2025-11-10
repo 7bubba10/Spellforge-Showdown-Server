@@ -21,6 +21,7 @@ const { createRoom, getRoom, removeRoomIfEmpty } = require('./rooms');
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({extended: true}));
 app.use("/api/lobbies", lobbyRoutes);
 
 // Sanity routes
