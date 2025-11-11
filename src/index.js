@@ -1,4 +1,4 @@
-const lobbyRoutes = require("../routes/lobby");
+const lobbyRoutes = require("../routes/lobbies");
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
