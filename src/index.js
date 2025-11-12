@@ -3,6 +3,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Server: IOServer } = require('socket.io');
+const { pool } = require('./db');
+
 
 // ── Tunables ─────────────────────────────────────────────
 const TICK_HZ = 10;                 // server tick frequency
@@ -27,6 +29,16 @@ app.use("/api/lobbies", lobbyRoutes);
 // Sanity routes
 app.get('/', (_req, res) => res.send('Hello World'));
 app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
+
+app.get('/health/db', async (_req, res) => {
+  try {
+    const r = await pool.query('SELECT 1 AS ok');
+    res.json({ ok: true, db: r.rows[0].ok === 1 });
+  } catch (e) {
+    console.error('[db] healthcheck failed:', e.message);
+    res.status(500).json({ ok: false, error: 'db_unreachable' });
+  }
+});
 
 // HTTP server
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3003;
