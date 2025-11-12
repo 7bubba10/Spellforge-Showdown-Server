@@ -1,3 +1,4 @@
+//test 1
 const { io } = require('socket.io-client');
 
 const socket = io('http://localhost:3003/game', { transports: ['websocket'] });
