@@ -1,10 +1,16 @@
-const lobbyRoutes = require("../routes/lobbies");
+// src/index.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Server: IOServer } = require('socket.io');
-const { pool } = require('./db');
+const path = require('path');
 
+const { pool } = require('./db');
+const { createMatchByLobbyCode } = require('./models/matchModel');
+
+// --- Routes (force exact files to avoid shadowing) ---
+const lobbyRoutes = require('../routes/lobbies');
+const matchRoutes = require(path.join(__dirname, '..', 'routes', 'match.js'));
 
 // ── Tunables ─────────────────────────────────────────────
 const TICK_HZ = 10;                 // server tick frequency
@@ -23,8 +29,31 @@ const { createRoom, getRoom, removeRoomIfEmpty } = require('./rooms');
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.urlencoded({extended: true}));
-app.use("/api/lobbies", lobbyRoutes);
+app.use(express.urlencoded({ extended: true }));
+
+// Mount routes
+app.use('/api/lobbies', lobbyRoutes);
+const matchRouter = express.Router();
+matchRouter.get('/_ping', (_req, res) => res.json({ ok: true }));
+matchRouter.post('/start', (req, res) => {
+  const { roomCode, mapId = null, mode = 'default' } = req.body || {};
+  if (!roomCode) return res.status(400).json({ error: 'roomCode_required' });
+  return res.status(201).json({
+    status: 'started',
+    matchId: 1,
+    lobbyId: 1,
+    startedAt: new Date().toISOString(),
+    mode,
+    mapId,
+  });
+});
+matchRouter.post('/end', (req, res) => {
+  const { matchId, winnerTeamId = null } = req.body || {};
+  if (!matchId) return res.status(400).json({ error: 'matchId_required' });
+  return res.json({ status: 'ended', matchId, endedAt: new Date().toISOString(), winnerTeamId });
+});
+app.use('/api/match', matchRouter);
+app.use('/api/match', matchRoutes);
 
 // Sanity routes
 app.get('/', (_req, res) => res.send('Hello World'));
@@ -97,7 +126,7 @@ function maybeStartMatch(room) {
 const roomTimers = new Map(); // code -> setInterval handle
 function startTick(code) {
   if (roomTimers.has(code)) return;
-  const handle = setInterval(() => {
+  const handle = setInterval(async () => {
     const room = getRoom(code);
     if (!room) return;
 
@@ -114,11 +143,22 @@ function startTick(code) {
         room.state.countdown = Math.max(0, room.state.countdown - 1);
         if (room.state.countdown === 0) {
           room.state.phase = 'match';
+
+          // Create a DB match row the moment we start
+          if (!room.matchId) {
+            try {
+              const row = await createMatchByLobbyCode({ code: room.code, mode: 'prototype' });
+              room.matchId = row.match_id;
+              console.log('[match] started:', { code: room.code, matchId: room.matchId });
+            } catch (e) {
+              console.error('[match] failed to create DB row on start:', e.message);
+            }
+          }
         }
       }
     }
 
-    // demo: slowly fill the capture point 
+    // demo: slowly fill the capture point
     const p = room.state.point.progress;
     room.state.point.progress = Math.min(100, p + 1);
 
@@ -240,7 +280,6 @@ game.on('connection', (socket) => {
     // may auto-start countdown if everyone’s ready
     maybeStartMatch(room);
   });
-
 
   // ---- Set ready flag (host or guest) ----
   socket.on('lobby:setReady', (payload) => {
