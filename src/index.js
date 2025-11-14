@@ -10,7 +10,7 @@ const { createMatchByLobbyCode } = require('./models/matchModel');
 
 // --- Routes (force exact files to avoid shadowing) ---
 const lobbyRoutes = require('../routes/lobbies');
-const matchRoutes = require(path.join(__dirname, '..', 'routes', 'match.js'));
+const matchRoutes = require('../routes/match');
 
 // ── Tunables ─────────────────────────────────────────────
 const TICK_HZ = 10;                 // server tick frequency
@@ -33,27 +33,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Mount routes
 app.use('/api/lobbies', lobbyRoutes);
-const matchRouter = express.Router();
-matchRouter.get('/_ping', (_req, res) => res.json({ ok: true }));
-matchRouter.post('/start', (req, res) => {
-  const { roomCode, mapId = null, mode = 'default' } = req.body || {};
-  if (!roomCode) return res.status(400).json({ error: 'roomCode_required' });
-  return res.status(201).json({
-    status: 'started',
-    matchId: 1,
-    lobbyId: 1,
-    startedAt: new Date().toISOString(),
-    mode,
-    mapId,
-  });
-});
-matchRouter.post('/end', (req, res) => {
-  const { matchId, winnerTeamId = null } = req.body || {};
-  if (!matchId) return res.status(400).json({ error: 'matchId_required' });
-  return res.json({ status: 'ended', matchId, endedAt: new Date().toISOString(), winnerTeamId });
-});
-app.use('/api/match', matchRouter);
-app.use('/api/match', matchRoutes);
+app.use('/api/match', matchRoutes); // ← only this; removed the inline stub
 
 // Sanity routes
 app.get('/', (_req, res) => res.send('Hello World'));
@@ -330,3 +310,4 @@ game.on('connection', (socket) => {
 });
 
 module.exports = { app, httpServer };
+
