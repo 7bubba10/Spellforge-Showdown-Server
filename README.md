@@ -1,4 +1,4 @@
-#THIS README IS OUTDATED
+# THIS README IS OUTDATED
 
 # Spellforge Showdown Backend Networking Implementation Plan
 
