@@ -1,3 +1,5 @@
+#THIS README IS OUTDATED
+
 # Spellforge Showdown Backend Networking Implementation Plan
 
 **Version:** November 2025\
